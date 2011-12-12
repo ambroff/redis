@@ -2,6 +2,7 @@
 #define __REDIS_RIO_H
 
 #include <stdio.h>
+#include <zlib.h>
 #include "sds.h"
 
 struct _rio {
@@ -21,6 +22,9 @@ struct _rio {
         struct {
             FILE *fp;
         } file;
+        struct {
+            gzFile *fp;
+        } gzfile;
     } io;
 };
 
@@ -30,6 +34,7 @@ typedef struct _rio rio;
 #define rioRead(rio,buf,len) ((rio)->read((rio),(buf),(len)))
 
 void rioInitWithFile(rio *r, FILE *fp);
+void rioInitWithGZipFile(rio *r, gzFile *fp);
 void rioInitWithBuffer(rio *r, sds s);
 
 size_t rioWriteBulkCount(rio *r, char prefix, int count);

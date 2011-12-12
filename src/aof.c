@@ -21,9 +21,11 @@ void aof_background_fsync(int fd) {
 void stopAppendOnly(void) {
     flushAppendOnlyFile(1);
     aof_fsync(server.appendfd);
+    gzclose(server.appendfp);
     close(server.appendfd);
 
     server.appendfd = -1;
+    server.appendfp = NULL;
     server.appendseldb = -1;
     server.appendonly = 0;
     /* rewrite operation in progress? kill it, wait child exit */
@@ -49,6 +51,9 @@ int startAppendOnly(void) {
         redisLog(REDIS_WARNING,"Used tried to switch on AOF via CONFIG, but I can't open the AOF file: %s",strerror(errno));
         return REDIS_ERR;
     }
+
+    server.appendfp = gzdopen(server.appendfd, "a");
+
     if (rewriteAppendOnlyFileBackground() == REDIS_ERR) {
         server.appendonly = 0;
         close(server.appendfd);
@@ -114,7 +119,7 @@ void flushAppendOnlyFile(int force) {
      * While this will save us against the server being killed I don't think
      * there is much to do about the whole server stopping for power problems
      * or alike */
-    nwritten = write(server.appendfd,server.aofbuf,sdslen(server.aofbuf));
+    nwritten = gzwrite(server.appendfp,server.aofbuf,sdslen(server.aofbuf));
     if (nwritten != (signed)sdslen(server.aofbuf)) {
         /* Ooops, we are in troubles. The best thing to do for now is
          * aborting instead of giving the illusion that everything is
@@ -303,20 +308,22 @@ void freeFakeClient(struct redisClient *c) {
  * fatal error an error message is logged and the program exists. */
 int loadAppendOnlyFile(char *filename) {
     struct redisClient *fakeClient;
-    FILE *fp = fopen(filename,"r");
+    int fd;
+    gzFile *fp = NULL;
     struct redis_stat sb;
     int appendonly = server.appendonly;
     long loops = 0;
 
-    if (fp && redis_fstat(fileno(fp),&sb) != -1 && sb.st_size == 0) {
-        server.appendonly_current_size = 0;
-        fclose(fp);
-        return REDIS_ERR;
-    }
-
-    if (fp == NULL) {
+    if ((fd = open(filename, O_RDONLY)) == -1
+        || (fp = gzdopen(fd,"r")) == NULL) {
         redisLog(REDIS_WARNING,"Fatal error: can't open the append log file for reading: %s",strerror(errno));
         exit(1);
+    }
+
+    if (fd && redis_fstat(fd,&sb) != -1 && sb.st_size == 0) {
+        server.appendonly_current_size = 0;
+        gzclose(fp);
+        return REDIS_ERR;
     }
 
     /* Temporarily disable AOF, to prevent EXEC from feeding a MULTI
@@ -324,7 +331,7 @@ int loadAppendOnlyFile(char *filename) {
     server.appendonly = 0;
 
     fakeClient = createFakeClient();
-    startLoading(fp);
+    startLoading(fd);
 
     while(1) {
         int argc, j;
@@ -336,12 +343,12 @@ int loadAppendOnlyFile(char *filename) {
 
         /* Serve the clients from time to time */
         if (!(loops++ % 1000)) {
-            loadingProgress(ftello(fp));
+            loadingProgress(gzoffset(fp));
             aeProcessEvents(server.el, AE_FILE_EVENTS|AE_DONT_WAIT);
         }
 
-        if (fgets(buf,sizeof(buf),fp) == NULL) {
-            if (feof(fp))
+        if (gzgets(fp, buf, sizeof(buf)) == NULL) {
+            if (gzeof(fp))
                 break;
             else
                 goto readerr;
@@ -352,13 +359,13 @@ int loadAppendOnlyFile(char *filename) {
 
         argv = zmalloc(sizeof(robj*)*argc);
         for (j = 0; j < argc; j++) {
-            if (fgets(buf,sizeof(buf),fp) == NULL) goto readerr;
+        if (gzgets(fp,buf,sizeof(buf)) == NULL) goto readerr;
             if (buf[0] != '$') goto fmterr;
             len = strtol(buf+1,NULL,10);
             argsds = sdsnewlen(NULL,len);
-            if (len && fread(argsds,len,1,fp) == 0) goto fmterr;
+            if (len && gzread(fp,argsds,len) == 0) goto fmterr;
             argv[j] = createObject(REDIS_STRING,argsds);
-            if (fread(buf,2,1,fp) == 0) goto fmterr; /* discard CRLF */
+            if (gzread(fp,buf,2) == 0) goto fmterr; /* discard CRLF */
         }
 
         /* Command lookup */
@@ -388,7 +395,7 @@ int loadAppendOnlyFile(char *filename) {
      * If the client is in the middle of a MULTI/EXEC, log error and quit. */
     if (fakeClient->flags & REDIS_MULTI) goto readerr;
 
-    fclose(fp);
+    gzclose(fp);
     freeFakeClient(fakeClient);
     server.appendonly = appendonly;
     stopLoading();
@@ -397,7 +404,7 @@ int loadAppendOnlyFile(char *filename) {
     return REDIS_OK;
 
 readerr:
-    if (feof(fp)) {
+    if (gzeof(fp)) {
         redisLog(REDIS_WARNING,"Unexpected end of file reading the append only file");
     } else {
         redisLog(REDIS_WARNING,"Unrecoverable error reading the append only file: %s", strerror(errno));
@@ -656,7 +663,8 @@ int rewriteAppendOnlyFile(char *filename) {
     dictIterator *di = NULL;
     dictEntry *de;
     rio aof;
-    FILE *fp;
+    int fd;
+    gzFile *fp = NULL;
     char tmpfile[256];
     int j;
     long long now = mstime();
@@ -664,13 +672,14 @@ int rewriteAppendOnlyFile(char *filename) {
     /* Note that we have to use a different temp name here compared to the
      * one used by rewriteAppendOnlyFileBackground() function. */
     snprintf(tmpfile,256,"temp-rewriteaof-%d.aof", (int) getpid());
-    fp = fopen(tmpfile,"w");
-    if (!fp) {
-        redisLog(REDIS_WARNING, "Failed rewriting the append only file: %s", strerror(errno));
+    if ((fd = open(tmpfile, O_WRONLY | O_CREAT, 0644)) == -1) {
+        redisLog(REDIS_WARNING,"Failed rewriting the append only file: %s",strerror(errno));
         return REDIS_ERR;
     }
 
-    rioInitWithFile(&aof,fp);
+    fp = gzdopen(fd,"w");
+    rioInitWithGZipFile(&aof,fp);
+
     for (j = 0; j < server.dbnum; j++) {
         char selectcmd[] = "*2\r\n$6\r\nSELECT\r\n";
         redisDb *db = server.db+j;
@@ -678,7 +687,7 @@ int rewriteAppendOnlyFile(char *filename) {
         if (dictSize(d) == 0) continue;
         di = dictGetSafeIterator(d);
         if (!di) {
-            fclose(fp);
+            gzclose(fp);
             return REDIS_ERR;
         }
 
@@ -731,9 +740,10 @@ int rewriteAppendOnlyFile(char *filename) {
     }
 
     /* Make sure data will not remain on the OS's output buffers */
-    fflush(fp);
-    aof_fsync(fileno(fp));
-    fclose(fp);
+    gzflush(fp, Z_FINISH);
+    aof_fsync(fd);
+    gzclose(fp);
+    close(fd);
 
     /* Use RENAME to make sure the DB file is changed atomically only
      * if the generate DB file is ok. */
@@ -746,7 +756,8 @@ int rewriteAppendOnlyFile(char *filename) {
     return REDIS_OK;
 
 werr:
-    fclose(fp);
+    gzclose(fp);
+    close(fd);
     unlink(tmpfile);
     redisLog(REDIS_WARNING,"Write error writing append only file on disk: %s", strerror(errno));
     if (di) dictReleaseIterator(di);
@@ -847,6 +858,7 @@ void aofUpdateCurrentSize(void) {
 void backgroundRewriteDoneHandler(int exitcode, int bysignal) {
     if (!bysignal && exitcode == 0) {
         int newfd, oldfd;
+        gzFile *fp = NULL;
         int nwritten;
         char tmpfile[256];
         long long now = ustime();
@@ -865,7 +877,9 @@ void backgroundRewriteDoneHandler(int exitcode, int bysignal) {
             goto cleanup;
         }
 
-        nwritten = write(newfd,server.bgrewritebuf,sdslen(server.bgrewritebuf));
+        fp = gzdopen(newfd, "a");
+
+        nwritten = gzwrite(fp,server.bgrewritebuf,sdslen(server.bgrewritebuf));
         if (nwritten != (signed)sdslen(server.bgrewritebuf)) {
             if (nwritten == -1) {
                 redisLog(REDIS_WARNING,
@@ -938,6 +952,8 @@ void backgroundRewriteDoneHandler(int exitcode, int bysignal) {
             /* AOF enabled, replace the old fd with the new one. */
             oldfd = server.appendfd;
             server.appendfd = newfd;
+            gzclose(server.appendfp);
+            server.appendfp = gzdopen(newfd, "a");
             if (server.appendfsync == APPENDFSYNC_ALWAYS)
                 aof_fsync(newfd);
             else if (server.appendfsync == APPENDFSYNC_EVERYSEC)

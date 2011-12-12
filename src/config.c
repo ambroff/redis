@@ -216,6 +216,10 @@ void loadServerConfigFromString(char *config) {
             if ((server.appendonly = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"compressaof") && argc == 2) {
+            if ((server.compressaof = yesnotoi(argv[1])) == -1) {
+                err = "argument must be 'yes' or 'no'"; goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"appendfilename") && argc == 2) {
             zfree(server.appendfilename);
             server.appendfilename = zstrdup(argv[1]);

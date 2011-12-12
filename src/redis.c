@@ -874,6 +874,7 @@ void initServerConfig() {
     server.syslog_facility = LOG_LOCAL0;
     server.daemonize = 0;
     server.appendonly = 0;
+    server.compressaof = 0;
     server.appendfsync = APPENDFSYNC_EVERYSEC;
     server.no_appendfsync_on_rewrite = 0;
     server.auto_aofrewrite_perc = REDIS_AUTO_AOFREWRITE_PERC;
@@ -882,6 +883,7 @@ void initServerConfig() {
     server.aofrewrite_scheduled = 0;
     server.lastfsync = time(NULL);
     server.appendfd = -1;
+    server.appendfp = NULL;
     server.appendseldb = -1; /* Make sure the first time will not match */
     server.aof_flush_postponed_start = 0;
     server.pidfile = zstrdup("/var/run/redis.pid");
@@ -1075,6 +1077,7 @@ void initServer() {
                 strerror(errno));
             exit(1);
         }
+	server.appendfp = gzdopen(server.appendfd, "a");
     }
 
     if (server.cluster_enabled) clusterInit();
@@ -1320,6 +1323,7 @@ int prepareForShutdown(int flags) {
         }
         /* Append only file: fsync() the AOF and exit */
         redisLog(REDIS_NOTICE,"Calling fsync() on the AOF file.");
+        gzflush(server.appendfp, Z_FINISH);
         aof_fsync(server.appendfd);
     }
     if ((server.saveparamslen > 0 && !nosave) || save) {
@@ -2099,8 +2103,9 @@ int main(int argc, char **argv) {
 #endif
     start = ustime();
     if (server.appendonly) {
-        if (loadAppendOnlyFile(server.appendfilename) == REDIS_OK)
+        if (loadAppendOnlyFile(server.appendfilename) == REDIS_OK) {
             redisLog(REDIS_NOTICE,"DB loaded from append only file: %.3f seconds",(float)(ustime()-start)/1000000);
+        }
     } else {
         if (rdbLoad(server.dbfilename) == REDIS_OK) {
             redisLog(REDIS_NOTICE,"DB loaded from disk: %.3f seconds",

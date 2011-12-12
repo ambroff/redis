@@ -40,6 +40,21 @@ static off_t rioFileTell(rio *r) {
     return ftello(r->io.file.fp);
 }
 
+/* Returns 0 for failure */
+static size_t rioGZipFileWrite(rio *r, const void *buf, size_t len) {
+    return gzwrite(r->io.gzfile.fp,buf,len);
+}
+
+/* Returns 0 for failure */
+static size_t rioGZipFileRead(rio *r, const void *buf, size_t len) {
+    return gzread(r->io.gzfile.fp,(void *) buf,len);
+}
+
+/* Returns read/write position in file. */
+static off_t rioGZipFileTell(rio *r) {
+    return gztell(r->io.gzfile.fp);
+}
+
 static const rio rioBufferIO = {
     rioBufferRead,
     rioBufferWrite,
@@ -54,9 +69,21 @@ static const rio rioFileIO = {
     { { NULL, 0 } } /* union for io-specific vars */
 };
 
+static const rio rioGZipFileIO = {
+    rioGZipFileRead,
+    rioGZipFileWrite,
+    rioGZipFileTell,
+    { { NULL, 0 } } /* union for io-specific vars */
+};
+
 void rioInitWithFile(rio *r, FILE *fp) {
     *r = rioFileIO;
     r->io.file.fp = fp;
+}
+
+void rioInitWithGZipFile(rio *r, gzFile *fp) {
+    *r = rioGZipFileIO;
+    r->io.gzfile.fp = fp;
 }
 
 void rioInitWithBuffer(rio *r, sds s) {

@@ -9,12 +9,12 @@ DEPENDENCY_TARGETS=hiredis linenoise lua
 
 ifeq ($(uname_S),SunOS)
   CFLAGS?=-std=c99 -pedantic $(OPTIMIZATION) -Wall -W -D__EXTENSIONS__ -D_XPG6
-  CCLINK?=-ldl -lnsl -lsocket -lm -lpthread
+  CCLINK?=-ldl -lnsl -lsocket -lm -lpthread -lz
   DEBUG?=-g -ggdb 
 else
   CFLAGS?=-std=c99 -pedantic $(OPTIMIZATION) -Wall -W $(ARCH) $(PROF)
-  CCLINK?=-lm -pthread
-  DEBUG?=-g -rdynamic -ggdb 
+  CCLINK?=-lm -pthread -lz
+  DEBUG?=-g -rdynamic -ggdb
 endif
 
 # Default allocator

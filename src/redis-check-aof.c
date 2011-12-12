@@ -1,9 +1,11 @@
 #include "fmacros.h"
+#include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <zlib.h>
 #include "config.h"
 
 #define ERROR(...) { \
@@ -23,10 +25,10 @@ int consumeNewline(char *buf) {
     return 1;
 }
 
-int readLong(FILE *fp, char prefix, long *target) {
+int readLong(gzFile *fp, char prefix, long *target) {
     char buf[128], *eptr;
-    epos = ftell(fp);
-    if (fgets(buf,sizeof(buf),fp) == NULL) {
+    epos = gzoffset(fp);
+    if (gzgets(fp, buf, sizeof(buf)) == NULL) {
         return 0;
     }
     if (buf[0] != prefix) {
@@ -37,10 +39,10 @@ int readLong(FILE *fp, char prefix, long *target) {
     return consumeNewline(eptr);
 }
 
-int readBytes(FILE *fp, char *target, long length) {
+int readBytes(gzFile *fp, char *target, long length) {
     long real;
-    epos = ftell(fp);
-    real = fread(target,1,length,fp);
+    epos = gzoffset(fp);
+    real = gzread(fp, target,length);
     if (real != length) {
         ERROR("Expected to read %ld bytes, got %ld bytes",length,real);
         return 0;
@@ -48,7 +50,7 @@ int readBytes(FILE *fp, char *target, long length) {
     return 1;
 }
 
-int readString(FILE *fp, char** target) {
+int readString(gzFile *fp, char** target) {
     long len;
     *target = NULL;
     if (!readLong(fp,'$',&len)) {
@@ -68,17 +70,17 @@ int readString(FILE *fp, char** target) {
     return 1;
 }
 
-int readArgc(FILE *fp, long *target) {
+int readArgc(gzFile *fp, long *target) {
     return readLong(fp,'*',target);
 }
 
-long process(FILE *fp) {
+long process(gzFile *fp) {
     long argc, pos = 0;
     int i, multi = 0;
     char *str;
 
     while(1) {
-        if (!multi) pos = ftell(fp);
+        if (!multi) pos = gzoffset(fp);
         if (!readArgc(fp, &argc)) break;
 
         for (i = 0; i < argc; i++) {
@@ -106,7 +108,7 @@ long process(FILE *fp) {
         }
     }
 
-    if (feof(fp) && multi && strlen(error) == 0) {
+    if (gzeof(fp) && multi && strlen(error) == 0) {
         ERROR("Reached EOF before reading EXEC for MULTI");
     }
     if (strlen(error) > 0) {
@@ -118,6 +120,8 @@ long process(FILE *fp) {
 int main(int argc, char **argv) {
     char *filename;
     int fix = 0;
+    int fd;
+    gzFile *fp = NULL;
 
     if (argc < 2) {
         printf("Usage: %s [--fix] <file.aof>\n", argv[0]);
@@ -136,14 +140,15 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    FILE *fp = fopen(filename,"r+");
-    if (fp == NULL) {
+    fd = open(filename, O_RDWR);
+    if (fd == -1) {
         printf("Cannot open file: %s\n", filename);
         exit(1);
     }
+    fp = gzopen(filename,"r");
 
     struct redis_stat sb;
-    if (redis_fstat(fileno(fp),&sb) == -1) {
+    if (redis_fstat(fd,&sb) == -1) {
         printf("Cannot stat file: %s\n", filename);
         exit(1);
     }
@@ -166,7 +171,7 @@ int main(int argc, char **argv) {
                     printf("Aborting...\n");
                     exit(1);
             }
-            if (ftruncate(fileno(fp), pos) == -1) {
+            if (ftruncate(fd, pos) == -1) {
                 printf("Failed to truncate AOF\n");
                 exit(1);
             } else {
@@ -180,6 +185,7 @@ int main(int argc, char **argv) {
         printf("AOF is valid\n");
     }
 
-    fclose(fp);
+    gzclose(fp);
+    close(fd);
     return 0;
 }

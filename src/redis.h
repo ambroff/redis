@@ -20,6 +20,7 @@
 #include <syslog.h>
 #include <netinet/in.h>
 #include <lua.h>
+#include <zlib.h>
 
 #include "ae.h"      /* Event driven programming library */
 #include "sds.h"     /* Dynamic safe strings */
@@ -540,6 +541,7 @@ struct redisServer {
     int dbnum;
     int daemonize;
     int appendonly;
+    int compressaof;
     int appendfsync;
     int no_appendfsync_on_rewrite;
     int auto_aofrewrite_perc;       /* Rewrite AOF if % growth is > M and... */
@@ -555,6 +557,7 @@ struct redisServer {
     long long dirty_before_bgsave; /* used to restore dirty on failed BGSAVE */
     time_t lastfsync;
     int appendfd;
+    gzFile *appendfp;
     int appendseldb;
     time_t aof_flush_postponed_start;
     char *pidfile;
@@ -863,7 +866,7 @@ void updateSlavesWaitingBgsave(int bgsaveerr);
 void replicationCron(void);
 
 /* Generic persistence functions */
-void startLoading(FILE *fp);
+void startLoading(int fd);
 void loadingProgress(off_t pos);
 void stopLoading(void);
 

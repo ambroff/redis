@@ -925,13 +925,13 @@ robj *rdbLoadObject(int rdbtype, rio *rdb) {
 
 /* Mark that we are loading in the global state and setup the fields
  * needed to provide loading stats. */
-void startLoading(FILE *fp) {
+void startLoading(int fd) {
     struct stat sb;
 
     /* Load the DB */
     server.loading = 1;
     server.loading_start_time = time(NULL);
-    if (fstat(fileno(fp), &sb) == -1) {
+    if (fstat(fd, &sb) == -1) {
         server.loading_total_bytes = 1; /* just to avoid division by zero */
     } else {
         server.loading_total_bytes = sb.st_size;
@@ -980,7 +980,8 @@ int rdbLoad(char *filename) {
         return REDIS_ERR;
     }
 
-    startLoading(fp);
+    // FIXME: make rdbLoad() work
+    //startLoading(fp);
     while(1) {
         robj *key, *val;
         expiretime = -1;
