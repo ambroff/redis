@@ -1000,7 +1000,11 @@ int rdbLoad(char *filename) {
             continue;
         }
         /* Add the new object in the hash table */
-        dbAdd(db,key,val);
+        if (lookupKeyWrite(db,key) == NULL) {
+            dbAdd(db,key,val);
+        } else {
+            dbOverwrite(db,key,val);
+        }
 
         /* Set the expire time if needed */
         if (expiretime != -1) setExpire(db,key,expiretime);

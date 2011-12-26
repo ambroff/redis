@@ -470,6 +470,7 @@ struct redisServer {
     time_t repl_transfer_lastio; /* unix time of the latest read, for timeout */
     int repl_serve_stale_data; /* Serve stale data when link is down? */
     time_t repl_down_since; /* unix time at which link with master went down */
+    int keep_slave_data; /* Don't trash db when setting up replication. */
     /* Limits */
     unsigned int maxclients;
     unsigned long long maxmemory;

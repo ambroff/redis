@@ -213,6 +213,10 @@ void loadServerConfig(char *filename) {
             if ((server.repl_serve_stale_data = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"keep-slave-data") && argc == 2) {
+            if ((server.keep_slave_data = yesnotoi(argv[1])) == -1) {
+                err = "argument must be 'yes' or 'no'"; goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"glueoutputbuf")) {
             redisLog(REDIS_WARNING, "Deprecated configuration directive: \"%s\"", argv[0]);
         } else if (!strcasecmp(argv[0],"rdbcompression") && argc == 2) {

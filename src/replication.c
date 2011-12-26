@@ -339,7 +339,13 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
         redisLog(REDIS_NOTICE, "MASTER <-> SLAVE sync: Loading DB in memory");
-        emptyDb();
+
+        /* Only purge data in the slave if we haven't specified that we want to
+         * keep it. */
+        if (!server.keep_slave_data) {
+            emptyDb();
+        }
+
         /* Before loading the DB into memory we need to delete the readable
          * handler, otherwise it will get called recursively since
          * rdbLoad() will call the event loop to process events from time to
