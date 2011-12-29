@@ -1,3 +1,9 @@
+redis (2:2.4.2-2~fs1) unstable; urgency=low
+
+  * New build with Formspring patches.
+
+ -- Kyle Ambroff <kyle@ambroff.com>  Thu, 29 Dec 2011 21:18:10 +0000
+
 redis (2:2.4.2-2) unstable; urgency=low
 
   * Fix test suite on sparc (Closes: #647627)
