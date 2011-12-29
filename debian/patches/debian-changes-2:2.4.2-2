@@ -1,0 +1,31 @@
+Description: Upstream changes introduced in version 2:2.4.2-2
+ This patch has been created by dpkg-source during the package build.
+ Here's the last changelog entry, hopefully it gives details on why
+ those changes were made:
+ .
+ redis (2:2.4.2-2) unstable; urgency=low
+ .
+   * Fix test suite on sparc (Closes: #647627)
+ .
+ The person named in the Author field signed this changelog entry.
+Author: Chris Lamb <lamby@debian.org>
+Bug-Debian: http://bugs.debian.org/647627
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: <vendor|upstream|other>, <url of original patch>
+Bug: <url in upstream bugtracker>
+Bug-Debian: http://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Reviewed-By: <name and email of someone who approved the patch>
+Last-Update: <YYYY-MM-DD>
+
+--- /dev/null
++++ redis-2.4.2/src/release.h
+@@ -0,0 +1,2 @@
++#define REDIS_GIT_SHA1 "00000000"
++#define REDIS_GIT_DIRTY "0"

@@ -1,0 +1,17 @@
+# Description: Fix testsuite on sparc
+# Bug: https://github.com/antirez/redis/pull/239
+# Bug-Debian: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=647627
+# Author: Jurij Smakov <jurij@wooyd.org>
+
+--- a/deps/jemalloc/include/jemalloc/internal/jemalloc_internal.h.in	2011-10-26 15:16:33.000000000 +0100
++++ b/deps/jemalloc/include/jemalloc/internal/jemalloc_internal.h.in	2011-12-04 22:23:01.172009427 +0000
+@@ -132,6 +132,9 @@
+ #ifdef __alpha__
+ #  define LG_QUANTUM		4
+ #endif
++#ifdef __sparc__
++#  define LG_QUANTUM		3
++#endif
+ #ifdef __sparc64__
+ #  define LG_QUANTUM		4
+ #endif
